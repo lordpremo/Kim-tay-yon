@@ -1,7 +1,33 @@
+// ====== DOM ELEMENTS ======
+const homeScreenEl = document.getElementById("homeScreen");
+const btnStart = document.getElementById("btnStart");
+const hudEl = document.getElementById("hud");
+const scoreEl = document.getElementById("score");
+const coinsEl = document.getElementById("coins");
+const missionsEl = document.getElementById("missions");
+const gameOverEl = document.getElementById("gameOver");
+const finalScoreEl = document.getElementById("finalScore");
+const finalCoinsEl = document.getElementById("finalCoins");
+const bgMusic = document.getElementById("bgMusic");
+
+// ====== GAME STATE ======
+let gameStarted = false;
+let isGameOver = false;
+let speed = 0.35;
+let distance = 0;
+let coinsCollected = 0;
+let obstaclesPassed = 0;
+
+// Gift ya kuanza
+const START_GIFT_COINS = 50;
+
 // ====== THREE.JS SETUP ======
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.Fog(0x000000, 10, 80);
+// Sky gradient effect
+const topColor = new THREE.Color(0x222244);
+const bottomColor = new THREE.Color(0x000000);
+scene.background = bottomColor;
+scene.fog = new THREE.Fog(0x000000, 10, 90);
 
 const camera = new THREE.PerspectiveCamera(
   70,
@@ -9,7 +35,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 5, 10);
+camera.position.set(0, 5, 12);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -17,22 +43,32 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // LIGHTS
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.7);
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.8);
 scene.add(hemiLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.position.set(5, 10, 5);
+const dirLight = new THREE.DirectionalLight(0xfff2cc, 1.1);
+dirLight.position.set(10, 20, 10);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 1024;
-dirLight.shadow.mapSize.height = 1024;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
 scene.add(dirLight);
+
+// Soft fill light
+const fillLight = new THREE.DirectionalLight(0x3366ff, 0.3);
+fillLight.position.set(-10, 5, 5);
+scene.add(fillLight);
 
 // LANES
 const lanes = [-2, 0, 2];
 
 // PLAYER
 const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
-const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
+const playerMaterial = new THREE.MeshStandardMaterial({
+  color: 0x00ffcc,
+  emissive: 0x003333,
+  metalness: 0.3,
+  roughness: 0.4
+});
 const player = new THREE.Mesh(playerGeometry, playerMaterial);
 player.castShadow = true;
 player.position.set(0, 1, 0);
@@ -45,54 +81,81 @@ let isJumping = false;
 let isSliding = false;
 let slideTimer = 0;
 
-// GROUND
+// GROUND + RIVER
 const groundTiles = [];
-const tileLength = 20;
-const numTiles = 6;
-const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+const tileLength = 25;
+const numTiles = 7;
+
+const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x3b3b3b });
+const riverMaterial = new THREE.MeshStandardMaterial({
+  color: 0x003366,
+  emissive: 0x001122,
+  metalness: 0.8,
+  roughness: 0.2
+});
 
 for (let i = 0; i < numTiles; i++) {
-  const groundGeo = new THREE.BoxGeometry(8, 0.5, tileLength);
+  const groundGeo = new THREE.BoxGeometry(10, 0.5, tileLength);
   const ground = new THREE.Mesh(groundGeo, groundMaterial);
   ground.receiveShadow = true;
   ground.position.set(0, -1, -i * tileLength);
   scene.add(ground);
   groundTiles.push(ground);
+
+  const riverGeo = new THREE.BoxGeometry(3, 0.2, tileLength);
+  const river = new THREE.Mesh(riverGeo, riverMaterial);
+  river.position.set(-4, -1.1, -i * tileLength);
+  scene.add(river);
 }
 
-// ENVIRONMENT
+// ENVIRONMENT (TREES + ROCKS + TORCHES)
 const envObjects = [];
-const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x228b22 });
 
-function spawnTree(zPos) {
-  const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 6);
+function spawnTree(zPos, side) {
+  const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 1.8, 8);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
   const trunk = new THREE.Mesh(trunkGeo, trunkMat);
   trunk.castShadow = true;
 
-  const crownGeo = new THREE.SphereGeometry(0.9, 8, 8);
-  const crown = new THREE.Mesh(crownGeo, treeMaterial);
+  const crownGeo = new THREE.SphereGeometry(1.1, 10, 10);
+  const crownMat = new THREE.MeshStandardMaterial({ color: 0x1f8b4c });
+  const crown = new THREE.Mesh(crownGeo, crownMat);
   crown.castShadow = true;
 
   const group = new THREE.Group();
-  trunk.position.y = 0.75;
-  crown.position.y = 1.8;
+  trunk.position.y = 0.9;
+  crown.position.y = 2.2;
   group.add(trunk);
   group.add(crown);
 
-  const side = Math.random() > 0.5 ? -1 : 1;
-  group.position.set(5 * side, -0.5, zPos);
+  group.position.set(side * (5 + Math.random() * 2), -0.5, zPos);
   scene.add(group);
   envObjects.push(group);
 }
 
-for (let i = 0; i < 20; i++) {
-  spawnTree(-i * 10 - 15);
+function spawnRock(zPos, side) {
+  const rockGeo = new THREE.DodecahedronGeometry(0.7 + Math.random() * 0.5);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+  const rock = new THREE.Mesh(rockGeo, rockMat);
+  rock.castShadow = true;
+  rock.position.set(side * (4 + Math.random() * 2), -0.5, zPos);
+  scene.add(rock);
+  envObjects.push(rock);
+}
+
+for (let i = 0; i < 30; i++) {
+  const z = -i * 10 - 15;
+  const side = Math.random() > 0.5 ? 1 : -1;
+  spawnTree(z, side);
+  if (Math.random() > 0.5) spawnRock(z + 3, side);
 }
 
 // OBSTACLES
 const obstacles = [];
-const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0xff4444 });
+const obstacleMaterial = new THREE.MeshStandardMaterial({
+  color: 0xff4444,
+  emissive: 0x330000
+});
 
 function spawnObstacle(zPos) {
   const laneIndex = Math.floor(Math.random() * lanes.length);
@@ -100,9 +163,13 @@ function spawnObstacle(zPos) {
 
   const type = Math.random();
   let geo;
-  if (type < 0.33) geo = new THREE.BoxGeometry(1.5, 1, 1.5);
-  else if (type < 0.66) geo = new THREE.BoxGeometry(1.5, 3, 1.5);
-  else geo = new THREE.BoxGeometry(2.5, 2, 1.5);
+  if (type < 0.33) {
+    geo = new THREE.BoxGeometry(1.5, 1, 1.5); // low
+  } else if (type < 0.66) {
+    geo = new THREE.BoxGeometry(1.5, 3, 1.5); // tall
+  } else {
+    geo = new THREE.BoxGeometry(2.5, 2, 1.5); // wide
+  }
 
   const mesh = new THREE.Mesh(geo, obstacleMaterial);
   mesh.castShadow = true;
@@ -111,52 +178,43 @@ function spawnObstacle(zPos) {
   obstacles.push(mesh);
 }
 
-for (let i = 0; i < 10; i++) {
-  spawnObstacle(-30 - i * 15);
+for (let i = 0; i < 12; i++) {
+  spawnObstacle(-35 - i * 18);
 }
 
 // COINS
 const coins = [];
-const coinMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700 });
+const coinMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffd700,
+  emissive: 0x664400,
+  metalness: 1,
+  roughness: 0.2
+});
 
 function spawnCoin(zPos) {
   const laneIndex = Math.floor(Math.random() * lanes.length);
   const x = lanes[laneIndex];
 
-  const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+  const geo = new THREE.CylinderGeometry(0.45, 0.45, 0.12, 20);
   const coin = new THREE.Mesh(geo, coinMaterial);
   coin.castShadow = true;
   coin.rotation.x = Math.PI / 2;
-  coin.position.set(x, 1.2, zPos);
+  coin.position.set(x, 1.3, zPos);
   scene.add(coin);
   coins.push(coin);
 }
 
-for (let i = 0; i < 20; i++) {
-  spawnCoin(-15 - i * 10);
+for (let i = 0; i < 25; i++) {
+  spawnCoin(-18 - i * 10);
 }
-
-// GAME STATE
-let speed = 0.3;
-let distance = 0;
-let isGameOver = false;
-let coinsCollected = 0;
-let obstaclesPassed = 0;
 
 // MISSIONS
 const missions = [
   { id: 1, title: "Kimbia 200m", done: false, check: () => distance >= 200 },
-  { id: 2, title: "Kimbia 500m", done: false, check: () => distance >= 500 },
-  { id: 3, title: "Kusanya 20 coins", done: false, check: () => coinsCollected >= 20 },
-  { id: 4, title: "Epuka obstacles 30", done: false, check: () => obstaclesPassed >= 30 }
+  { id: 2, title: "Kimbia 600m", done: false, check: () => distance >= 600 },
+  { id: 3, title: "Kusanya 30 coins", done: false, check: () => coinsCollected >= 30 },
+  { id: 4, title: "Epuka obstacles 40", done: false, check: () => obstaclesPassed >= 40 }
 ];
-
-const scoreEl = document.getElementById("score");
-const coinsEl = document.getElementById("coins");
-const missionsEl = document.getElementById("missions");
-const gameOverEl = document.getElementById("gameOver");
-const finalScoreEl = document.getElementById("finalScore");
-const finalCoinsEl = document.getElementById("finalCoins");
 
 function renderMissions() {
   missionsEl.innerHTML = "";
@@ -176,34 +234,41 @@ let touchEndX = 0;
 let touchEndY = 0;
 
 function moveLeft() {
+  if (!gameStarted || isGameOver) return;
   if (currentLaneIndex > 0) {
     currentLaneIndex--;
     targetX = lanes[currentLaneIndex];
   }
 }
 function moveRight() {
+  if (!gameStarted || isGameOver) return;
   if (currentLaneIndex < lanes.length - 1) {
     currentLaneIndex++;
     targetX = lanes[currentLaneIndex];
   }
 }
 function jump() {
+  if (!gameStarted || isGameOver) return;
   if (!isJumping && !isSliding) {
     isJumping = true;
-    verticalVelocity = 0.5;
+    verticalVelocity = 0.6; // stronger jump
   }
 }
 function slide() {
+  if (!gameStarted || isGameOver) return;
   if (!isSliding && !isJumping) {
     isSliding = true;
-    slideTimer = 0.5;
+    slideTimer = 0.6;
     player.scale.y = 0.5;
     player.position.y = 0.5;
   }
 }
 
 window.addEventListener("keydown", (e) => {
-  if (isGameOver) return;
+  if (e.key === "Enter" && !gameStarted && !isGameOver) {
+    startGame();
+    return;
+  }
   if (e.key === "ArrowLeft" || e.key === "a") moveLeft();
   if (e.key === "ArrowRight" || e.key === "d") moveRight();
   if (e.key === "ArrowUp" || e.key === "w" || e.key === " ") jump();
@@ -211,14 +276,17 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("touchstart", (e) => {
-  if (isGameOver) return;
+  if (!gameStarted && !isGameOver) {
+    startGame();
+    return;
+  }
   const t = e.touches[0];
   touchStartX = t.clientX;
   touchStartY = t.clientY;
 });
 
 window.addEventListener("touchend", (e) => {
-  if (isGameOver) return;
+  if (!gameStarted || isGameOver) return;
   const t = e.changedTouches[0];
   touchEndX = t.clientX;
   touchEndY = t.clientY;
@@ -266,10 +334,27 @@ function checkCollisions() {
 
 // GAME OVER
 function gameOver() {
+  if (isGameOver) return;
   isGameOver = true;
   finalScoreEl.textContent = Math.floor(distance);
   finalCoinsEl.textContent = coinsCollected;
   gameOverEl.style.display = "flex";
+}
+
+// START GAME
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  hudEl.style.display = "block";
+  homeScreenEl.style.display = "none";
+
+  // gift
+  coinsCollected += START_GIFT_COINS;
+  coinsEl.textContent = coinsCollected;
+
+  // music
+  bgMusic.volume = 0.4;
+  bgMusic.play().catch(() => {});
 }
 
 // RESIZE
@@ -279,6 +364,11 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// HOME BUTTON
+btnStart.addEventListener("click", () => {
+  startGame();
+});
+
 // MAIN LOOP
 const clock = new THREE.Clock();
 
@@ -286,11 +376,12 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
 
-  if (!isGameOver) {
+  if (gameStarted && !isGameOver) {
     distance += speed;
     scoreEl.textContent = Math.floor(distance);
-    speed += 0.0005;
+    speed += 0.0004;
 
+    // Ground & river
     groundTiles.forEach((tile) => {
       tile.position.z += speed;
       if (tile.position.z > camera.position.z + tileLength) {
@@ -298,41 +389,46 @@ function animate() {
       }
     });
 
+    // Env
     envObjects.forEach((obj) => {
       obj.position.z += speed;
-      if (obj.position.z > camera.position.z + 10) {
-        obj.position.z -= 200;
+      if (obj.position.z > camera.position.z + 12) {
+        obj.position.z -= 260;
       }
     });
 
+    // Obstacles
     obstacles.forEach((obs) => {
       const prevZ = obs.position.z;
       obs.position.z += speed;
       if (prevZ < player.position.z && obs.position.z >= player.position.z) {
         obstaclesPassed++;
       }
-      if (obs.position.z > camera.position.z + 5) {
-        obs.position.z -= 200;
+      if (obs.position.z > camera.position.z + 6) {
+        obs.position.z -= 260;
         const laneIndex = Math.floor(Math.random() * lanes.length);
         obs.position.x = lanes[laneIndex];
       }
     });
 
+    // Coins
     coins.forEach((coin) => {
       coin.position.z += speed;
       coin.rotation.z += delta * 5;
-      if (coin.position.z > camera.position.z + 5) {
-        coin.position.z -= 200;
+      if (coin.position.z > camera.position.z + 6) {
+        coin.position.z -= 260;
         coin.visible = true;
         const laneIndex = Math.floor(Math.random() * lanes.length);
         coin.position.x = lanes[laneIndex];
       }
     });
 
+    // Lane movement
     player.position.x += (targetX - player.position.x) * 0.2;
 
+    // Jump (better arc)
     if (isJumping) {
-      verticalVelocity -= 1.5 * delta;
+      verticalVelocity -= 2.2 * delta;
       player.position.y += verticalVelocity / 0.016;
       if (player.position.y <= 1) {
         player.position.y = 1;
@@ -341,6 +437,7 @@ function animate() {
       }
     }
 
+    // Slide
     if (isSliding) {
       slideTimer -= delta;
       if (slideTimer <= 0) {
@@ -350,11 +447,13 @@ function animate() {
       }
     }
 
+    // Camera follow
     camera.position.x += (player.position.x - camera.position.x) * 0.1;
-    camera.position.z = player.position.z + 10;
-    camera.position.y = 5;
-    camera.lookAt(player.position.x, 1, player.position.z);
+    camera.position.z = player.position.z + 12;
+    camera.position.y = 5.5;
+    camera.lookAt(player.position.x, 1.2, player.position.z);
 
+    // Missions
     let changed = false;
     missions.forEach(m => {
       if (!m.done && m.check()) {
@@ -364,6 +463,7 @@ function animate() {
     });
     if (changed) renderMissions();
 
+    // Collisions
     checkCollisions();
   }
 
