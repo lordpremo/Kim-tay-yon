@@ -9,24 +9,37 @@ const gameOverEl = document.getElementById("gameOver");
 const finalScoreEl = document.getElementById("finalScore");
 const finalCoinsEl = document.getElementById("finalCoins");
 const bgMusic = document.getElementById("bgMusic");
+const sfxCoin = document.getElementById("sfxCoin");
+const sfxHit = document.getElementById("sfxHit");
+const topRightEl = document.getElementById("topRight");
+const btnPause = document.getElementById("btnPause");
+const pauseOverlay = document.getElementById("pauseOverlay");
+const btnResume = document.getElementById("btnResume");
+const magnetStatusEl = document.getElementById("magnetStatus");
+const speedStatusEl = document.getElementById("speedStatus");
 
 // ====== GAME STATE ======
 let gameStarted = false;
 let isGameOver = false;
-let speed = 0.35;
+let isPaused = false;
+
+let baseSpeed = 0.35;
+let speed = baseSpeed;
 let distance = 0;
 let coinsCollected = 0;
 let obstaclesPassed = 0;
 
-// Gift ya kuanza
 const START_GIFT_COINS = 50;
+const START_GIFT_MAGNET_TIME = 5; // sekunde
+
+// Powerups
+let magnetActive = false;
+let magnetTimer = 0;
+let speedBoostActive = false;
+let speedBoostTimer = 0;
 
 // ====== THREE.JS SETUP ======
 const scene = new THREE.Scene();
-// Sky gradient effect
-const topColor = new THREE.Color(0x222244);
-const bottomColor = new THREE.Color(0x000000);
-scene.background = bottomColor;
 scene.fog = new THREE.Fog(0x000000, 10, 90);
 
 const camera = new THREE.PerspectiveCamera(
@@ -53,7 +66,6 @@ dirLight.shadow.mapSize.width = 2048;
 dirLight.shadow.mapSize.height = 2048;
 scene.add(dirLight);
 
-// Soft fill light
 const fillLight = new THREE.DirectionalLight(0x3366ff, 0.3);
 fillLight.position.set(-10, 5, 5);
 scene.add(fillLight);
@@ -108,7 +120,7 @@ for (let i = 0; i < numTiles; i++) {
   scene.add(river);
 }
 
-// ENVIRONMENT (TREES + ROCKS + TORCHES)
+// ENVIRONMENT
 const envObjects = [];
 
 function spawnTree(zPos, side) {
@@ -164,11 +176,11 @@ function spawnObstacle(zPos) {
   const type = Math.random();
   let geo;
   if (type < 0.33) {
-    geo = new THREE.BoxGeometry(1.5, 1, 1.5); // low
+    geo = new THREE.BoxGeometry(1.5, 1, 1.5);
   } else if (type < 0.66) {
-    geo = new THREE.BoxGeometry(1.5, 3, 1.5); // tall
+    geo = new THREE.BoxGeometry(1.5, 3, 1.5);
   } else {
-    geo = new THREE.BoxGeometry(2.5, 2, 1.5); // wide
+    geo = new THREE.BoxGeometry(2.5, 2, 1.5);
   }
 
   const mesh = new THREE.Mesh(geo, obstacleMaterial);
@@ -208,13 +220,47 @@ for (let i = 0; i < 25; i++) {
   spawnCoin(-18 - i * 10);
 }
 
+// POWERUP OBJECTS (magnet + speed)
+const powerups = [];
+const powerupMaterialMagnet = new THREE.MeshStandardMaterial({
+  color: 0x00ffff,
+  emissive: 0x004444
+});
+const powerupMaterialSpeed = new THREE.MeshStandardMaterial({
+  color: 0xff8800,
+  emissive: 0x442200
+});
+
+function spawnPowerup(zPos, type) {
+  const laneIndex = Math.floor(Math.random() * lanes.length);
+  const x = lanes[laneIndex];
+
+  const geo = new THREE.TorusGeometry(0.6, 0.15, 12, 24);
+  const mat = type === "magnet" ? powerupMaterialMagnet : powerupMaterialSpeed;
+  const pu = new THREE.Mesh(geo, mat);
+  pu.castShadow = true;
+  pu.position.set(x, 1.5, zPos);
+  pu.userData.type = type;
+  scene.add(pu);
+  powerups.push(pu);
+}
+
+// weka powerups wachache
+for (let i = 0; i < 6; i++) {
+  spawnPowerup(-40 - i * 40, i % 2 === 0 ? "magnet" : "speed");
+}
+
 // MISSIONS
 const missions = [
   { id: 1, title: "Kimbia 200m", done: false, check: () => distance >= 200 },
   { id: 2, title: "Kimbia 600m", done: false, check: () => distance >= 600 },
   { id: 3, title: "Kusanya 30 coins", done: false, check: () => coinsCollected >= 30 },
-  { id: 4, title: "Epuka obstacles 40", done: false, check: () => obstaclesPassed >= 40 }
+  { id: 4, title: "Epuka obstacles 40", done: false, check: () => obstaclesPassed >= 40 },
+  { id: 5, title: "Tumia powerup 1+", done: false, check: () => magnetUsed || speedBoostUsed }
 ];
+
+let magnetUsed = false;
+let speedBoostUsed = false;
 
 function renderMissions() {
   missionsEl.innerHTML = "";
@@ -234,28 +280,28 @@ let touchEndX = 0;
 let touchEndY = 0;
 
 function moveLeft() {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
   if (currentLaneIndex > 0) {
     currentLaneIndex--;
     targetX = lanes[currentLaneIndex];
   }
 }
 function moveRight() {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
   if (currentLaneIndex < lanes.length - 1) {
     currentLaneIndex++;
     targetX = lanes[currentLaneIndex];
   }
 }
 function jump() {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
   if (!isJumping && !isSliding) {
     isJumping = true;
-    verticalVelocity = 0.6; // stronger jump
+    verticalVelocity = 0.6;
   }
 }
 function slide() {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
   if (!isSliding && !isJumping) {
     isSliding = true;
     slideTimer = 0.6;
@@ -267,6 +313,10 @@ function slide() {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !gameStarted && !isGameOver) {
     startGame();
+    return;
+  }
+  if (e.key === "Escape") {
+    togglePause();
     return;
   }
   if (e.key === "ArrowLeft" || e.key === "a") moveLeft();
@@ -286,7 +336,7 @@ window.addEventListener("touchstart", (e) => {
 });
 
 window.addEventListener("touchend", (e) => {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
   const t = e.changedTouches[0];
   touchEndX = t.clientX;
   touchEndY = t.clientY;
@@ -307,27 +357,67 @@ window.addEventListener("touchend", (e) => {
 const playerBox = new THREE.Box3();
 const obstacleBox = new THREE.Box3();
 const coinBox = new THREE.Box3();
+const powerupBox = new THREE.Box3();
 
 function checkCollisions() {
   playerBox.setFromObject(player);
 
+  // Obstacles
   for (let i = 0; i < obstacles.length; i++) {
     const obs = obstacles[i];
     obstacleBox.setFromObject(obs);
     if (playerBox.intersectsBox(obstacleBox)) {
+      sfxHit.currentTime = 0;
+      sfxHit.play().catch(() => {});
       gameOver();
       return;
     }
   }
 
+  // Coins
   for (let i = 0; i < coins.length; i++) {
     const coin = coins[i];
     if (!coin.visible) continue;
+
+    if (magnetActive) {
+      const dx = player.position.x - coin.position.x;
+      const dz = player.position.z - coin.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 5) {
+        coin.position.x += dx * 0.15;
+        coin.position.z += dz * 0.15;
+      }
+    }
+
     coinBox.setFromObject(coin);
     if (playerBox.intersectsBox(coinBox)) {
       coin.visible = false;
       coinsCollected++;
       coinsEl.textContent = coinsCollected;
+      sfxCoin.currentTime = 0;
+      sfxCoin.play().catch(() => {});
+    }
+  }
+
+  // Powerups
+  for (let i = 0; i < powerups.length; i++) {
+    const pu = powerups[i];
+    if (!pu.visible) continue;
+    powerupBox.setFromObject(pu);
+    if (playerBox.intersectsBox(powerupBox)) {
+      pu.visible = false;
+      if (pu.userData.type === "magnet") {
+        magnetActive = true;
+        magnetTimer = 8;
+        magnetUsed = true;
+        magnetStatusEl.textContent = "On";
+      } else {
+        speedBoostActive = true;
+        speedBoostTimer = 6;
+        speed = baseSpeed * 1.7;
+        speedBoostUsed = true;
+        speedStatusEl.textContent = "Boost";
+      }
     }
   }
 }
@@ -339,6 +429,7 @@ function gameOver() {
   finalScoreEl.textContent = Math.floor(distance);
   finalCoinsEl.textContent = coinsCollected;
   gameOverEl.style.display = "flex";
+  bgMusic.pause();
 }
 
 // START GAME
@@ -347,26 +438,44 @@ function startGame() {
   gameStarted = true;
   hudEl.style.display = "block";
   homeScreenEl.style.display = "none";
+  topRightEl.style.display = "flex";
 
-  // gift
   coinsCollected += START_GIFT_COINS;
   coinsEl.textContent = coinsCollected;
 
-  // music
+  magnetActive = true;
+  magnetTimer = START_GIFT_MAGNET_TIME;
+  magnetStatusEl.textContent = "On";
+
   bgMusic.volume = 0.4;
   bgMusic.play().catch(() => {});
 }
+
+// PAUSE
+function togglePause() {
+  if (!gameStarted || isGameOver) return;
+  isPaused = !isPaused;
+  if (isPaused) {
+    pauseOverlay.style.display = "flex";
+    bgMusic.pause();
+  } else {
+    pauseOverlay.style.display = "none";
+    bgMusic.play().catch(() => {});
+  }
+}
+
+btnPause.addEventListener("click", togglePause);
+btnResume.addEventListener("click", togglePause);
+btnStart.addEventListener("click", () => {
+  startGame();
+  bgMusic.play().catch(() => {});
+});
 
 // RESIZE
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// HOME BUTTON
-btnStart.addEventListener("click", () => {
-  startGame();
 });
 
 // MAIN LOOP
@@ -376,10 +485,29 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
 
-  if (gameStarted && !isGameOver) {
+  if (gameStarted && !isGameOver && !isPaused) {
     distance += speed;
     scoreEl.textContent = Math.floor(distance);
-    speed += 0.0004;
+
+    baseSpeed += 0.00015;
+    if (!speedBoostActive) speed = baseSpeed;
+
+    // Powerup timers
+    if (magnetActive) {
+      magnetTimer -= delta;
+      if (magnetTimer <= 0) {
+        magnetActive = false;
+        magnetStatusEl.textContent = "Off";
+      }
+    }
+    if (speedBoostActive) {
+      speedBoostTimer -= delta;
+      if (speedBoostTimer <= 0) {
+        speedBoostActive = false;
+        speed = baseSpeed;
+        speedStatusEl.textContent = "Normal";
+      }
+    }
 
     // Ground & river
     groundTiles.forEach((tile) => {
@@ -423,10 +551,22 @@ function animate() {
       }
     });
 
+    // Powerups
+    powerups.forEach((pu) => {
+      pu.position.z += speed;
+      pu.rotation.y += delta * 3;
+      if (pu.position.z > camera.position.z + 6) {
+        pu.position.z -= 260;
+        pu.visible = true;
+        const laneIndex = Math.floor(Math.random() * lanes.length);
+        pu.position.x = lanes[laneIndex];
+      }
+    });
+
     // Lane movement
     player.position.x += (targetX - player.position.x) * 0.2;
 
-    // Jump (better arc)
+    // Jump
     if (isJumping) {
       verticalVelocity -= 2.2 * delta;
       player.position.y += verticalVelocity / 0.016;
