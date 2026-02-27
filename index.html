@@ -12,6 +12,7 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     canvas { display: block; }
+
     #hud {
       position: fixed;
       top: 10px;
@@ -24,6 +25,7 @@
       padding: 8px 12px;
       border-radius: 6px;
       max-width: 260px;
+      display: none; /* itaonekana baada ya kuanza game */
     }
     #hud .row { margin-bottom: 4px; }
     #hud span.value { font-weight: bold; color: #ffd700; }
@@ -55,21 +57,77 @@
       color: #000;
       cursor: pointer;
     }
+
+    #homeScreen {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at top, #444 0, #111 45%, #000 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 30;
+    }
+    #homeScreen h1 {
+      font-size: 40px;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    #homeScreen p {
+      margin: 4px 0;
+      opacity: 0.9;
+    }
+    #homeScreen button {
+      margin-top: 15px;
+      padding: 10px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ffd700, #ff8c00);
+      color: #000;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 0 15px rgba(255,215,0,0.5);
+    }
+    #giftInfo {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #ffd700;
+    }
   </style>
 </head>
 <body>
+  <!-- HOME SCREEN -->
+  <div id="homeScreen">
+    <h1>TEMPLE RUNNER 3D</h1>
+    <p>Kimbia, epuka obstacles, kusanya coins, maliza missions.</p>
+    <p>Gift ya kuanza: <strong>+50 coins</strong> ukianza game.</p>
+    <button id="btnStart">ANZA KUCHEZA</button>
+    <div id="giftInfo">Tap / Click kuanza, swipe au arrow keys kudhibiti.</div>
+  </div>
+
+  <!-- HUD -->
   <div id="hud">
     <div class="row">Umbali: <span id="score" class="value">0</span> m</div>
     <div class="row">Coins: <span id="coins" class="value">0</span></div>
     <div id="missions"></div>
   </div>
 
+  <!-- GAME OVER -->
   <div id="gameOver">
     <h1>Game Over</h1>
     <p>Umbali: <span id="finalScore">0</span> m</p>
     <p>Coins: <span id="finalCoins">0</span></p>
     <button onclick="location.reload()">Cheza Tena</button>
   </div>
+
+  <!-- MUSIC (royalty-free style placeholder) -->
+  <audio id="bgMusic" loop>
+    <!-- unaweza kubadilisha src hii baadaye na track yako -->
+    <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_7c3b8b9b4d.mp3?filename=epic-heroic-cinematic-trailer-116199.mp3" type="audio/mpeg">
+  </audio>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script src="main.js"></script>
